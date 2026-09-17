@@ -22,11 +22,16 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,-apple-sys
 .heading{display:flex;align-items:end;justify-content:space-between;gap:20px;margin:0 0 16px}
 .heading h2{font-size:32px;letter-spacing:-.025em;margin:0}
 .chip{background:var(--card);border:1px solid var(--line);padding:8px 10px;font-size:12px;color:var(--muted)}
-.panel,.metric,.chart,.note,.signals article,.cohort{background:var(--card);border:1px solid var(--line)}
+.panel,.metric,.chart,.note,.signals article,.cohort,.formula{background:var(--card);border:1px solid var(--line)}
 .panel{padding:20px}
 .panel input{width:100%;accent-color:var(--green)}
 .range{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
 .slider-note{margin:12px 0 0;color:var(--muted);font-size:12px}
+.formula{margin-top:9px;padding:16px 18px;display:grid;grid-template-columns:.7fr 1.3fr;gap:24px;align-items:start}
+.formula h3{margin:0;font-size:17px}
+.formula p{margin:3px 0;color:#444;font-size:13px}
+.formula .math{font-size:15px;line-height:1.75}
+.formula code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--soft);padding:2px 5px}
 .metrics,.signals{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin:9px 0}
 .metric,.signals article{padding:16px}
 .metric span,.signals span{display:block;color:var(--muted);font-size:11px}
@@ -35,6 +40,8 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,-apple-sys
 .grid{display:grid;grid-template-columns:1.45fr .65fr;gap:9px}
 .chart,.note,.cohort{padding:18px}
 .chart svg{width:100%;height:auto}
+.chart-explain{font-size:12px;color:var(--muted);margin:0 0 12px}
+.chart-explain strong{color:var(--ink)}
 .note h3,.chart h3,.cohort h3{margin:0 0 8px}
 .note p,.cohort p{color:#444}
 .note dl{margin-top:24px}
@@ -55,7 +62,7 @@ tr.best td{background:#dce7e2;font-weight:650}
 footer{margin-top:40px;border-top:1px solid var(--line);padding-top:18px;color:var(--muted);font-size:11px}
 .axis{stroke:#bbb}.gridline{stroke:#e8e8e8}.risk{fill:none;stroke:var(--green);stroke-width:3}.threshold{stroke:var(--rust);stroke-dasharray:5 5}.dot{fill:var(--green)}.alert{fill:var(--rust)}
 text{font:11px Inter,sans-serif;fill:var(--muted)}
-@media(max-width:760px){.heading{align-items:start;flex-direction:column}.metrics,.signals{grid-template-columns:1fr 1fr}.grid,.compare{grid-template-columns:1fr}.compare{gap:18px}.chip{max-width:100%}}
+@media(max-width:760px){.heading{align-items:start;flex-direction:column}.metrics,.signals{grid-template-columns:1fr 1fr}.grid,.compare,.formula{grid-template-columns:1fr}.compare{gap:18px}.chip{max-width:100%}}
 @media(max-width:470px){.wrap{width:calc(100% - 22px);padding-top:32px}.metrics,.signals{grid-template-columns:1fr}.hero h1{font-size:47px}.tabs{gap:14px}.tabs button{font-size:13px}}
 </style>
 </head>
@@ -80,7 +87,15 @@ text{font:11px Inter,sans-serif;fill:var(--muted)}
 <label>Intervene at predicted 24h failure risk ≥ <strong id="thlabel">25%</strong></label>
 <input id="threshold" type="range" min="5" max="60" step="5" value="25">
 <div class="range"><span>5% · aggressive</span><span>60% · selective</span></div>
-<p class="slider-note"><strong>Evaluation set is fixed:</strong> 1,000 held-out terminals × 24 scored days = 24,000 terminal-day rows. The first 6 days are excluded so history features have prior context. Moving the slider changes only which rows are classified high-risk.</p>
+<p class="slider-note"><strong>The slider does not change the evaluation dataset.</strong> It changes only the cutoff used to turn a continuous model score into an intervention decision.</p>
+</div>
+<div class="formula">
+<div><p class="kicker">WHY 24,000?</p><h3>One row = one terminal on one scored day.</h3><p>For each row, the model asks: <strong>will this terminal experience a material failure in the next 24 hours?</strong></p></div>
+<div class="math">
+<div><code>4,000 terminals × 25% holdout = 1,000 held-out terminals</code></div>
+<div><code>30 simulated days − 6 warm-up days = 24 scored days / terminal</code></div>
+<div><code>1,000 terminals × 24 scored days = 24,000 prediction observations</code></div>
+</div>
 </div>
 <div class="metrics">
 <article class="metric"><span>Failure-positive days detected</span><strong id="tp">500</strong><small id="recall"></small></article>
@@ -92,7 +107,8 @@ text{font:11px Inter,sans-serif;fill:var(--muted)}
 <div class="chart">
 <p class="kicker">OPERATING POINT</p>
 <h3>Failure recall across intervention thresholds</h3>
-<svg id="decisionChart" viewBox="0 0 700 300" aria-label="Model operating point chart"></svg>
+<p class="chart-explain"><strong>Y-axis = recall:</strong> the percentage of the 640 failure-positive terminal-days that the model correctly flags at each threshold.</p>
+<svg id="decisionChart" viewBox="0 0 700 300" aria-label="Failure recall by intervention threshold"></svg>
 </div>
 <aside class="note">
 <p class="kicker">INTERPRETATION</p>
@@ -101,8 +117,8 @@ text{font:11px Inter,sans-serif;fill:var(--muted)}
 <dl>
 <div><dt>Held-out terminals <span class="fixed">fixed</span></dt><dd>1,000</dd></div>
 <div><dt>Scored days / terminal <span class="fixed">fixed</span></dt><dd>24</dd></div>
-<div><dt>Evaluation rows <span class="fixed">fixed</span></dt><dd>24,000 terminal-days</dd></div>
-<div><dt>Failure-positive rows <span class="fixed">fixed</span></dt><dd>640</dd></div>
+<div><dt>Prediction observations <span class="fixed">fixed</span></dt><dd>24,000</dd></div>
+<div><dt>Failure-positive observations <span class="fixed">fixed</span></dt><dd>640</dd></div>
 <div><dt>Baseline positive rate <span class="fixed">fixed</span></dt><dd>2.67%</dd></div>
 <div class="dynamic"><dt>Predicted high-risk <span class="fixed">threshold-dependent</span></dt><dd id="riskshare">2.92%</dd></div>
 <div class="dynamic"><dt>Missed failure-positive rows <span class="fixed">threshold-dependent</span></dt><dd id="fn">140</dd></div>
@@ -174,7 +190,7 @@ function decision(){
   q('#thlabel').textContent=pct(r[0],0);
   q('#tp').textContent=r[1].toLocaleString();
   q('#fp').textContent=r[2].toLocaleString();
-  q('#precision').textContent=pct(r[3])+' precision · '+pct(interventionRate,2)+' of holdout';
+  q('#precision').textContent=pct(r[3])+' precision · '+pct(interventionRate,2)+' of observations';
   q('#recall').textContent=pct(r[4])+' recall';
   q('#fpr').textContent=pct(r[5],2)+' false-positive rate';
   q('#flagged').textContent=r[6].toLocaleString();
@@ -184,10 +200,10 @@ function decision(){
   q('#fn').textContent=fn.toLocaleString();
   q('#tn').textContent=tn.toLocaleString();
   q('#copy').textContent=r[0]<=.1
-    ? 'This is an aggressive early-warning policy: it detects more of the 640 failure-positive terminal-days, but flags more healthy terminal-days in the same fixed evaluation set.'
+    ? 'This is an aggressive early-warning policy: it detects more of the 640 failure-positive observations, but flags more healthy terminal-days in the same fixed evaluation set.'
     : r[0]<=.3
-    ? 'This range detects most failure-positive terminal-days while limiting unnecessary interventions. The 1,000 terminals and 24,000 evaluation rows stay fixed; only the classification rule changes.'
-    : 'This policy is more selective. Fewer terminal-days trigger intervention, but more of the 640 failure-positive rows fall below threshold.';
+    ? 'This range detects most failure-positive observations while limiting unnecessary interventions. The 1,000 terminals and 24,000 prediction observations stay fixed; only the decision cutoff changes.'
+    : 'This policy is more selective. Fewer terminal-days trigger intervention, but more of the 640 failure-positive observations fall below threshold.';
   drawDecision(); drawRisk();
 }
 function line(svg,x1,y1,x2,y2,c){let n=document.createElementNS('http://www.w3.org/2000/svg','line');for(const[k,v]of Object.entries({x1,y1,x2,y2,class:c}))n.setAttribute(k,v);svg.append(n)}
@@ -196,15 +212,15 @@ function rotatedText(svg,x,y,t){let n=document.createElementNS('http://www.w3.or
 function circle(svg,cx,cy,cl){let n=document.createElementNS('http://www.w3.org/2000/svg','circle');n.setAttribute('cx',cx);n.setAttribute('cy',cy);n.setAttribute('r',5);n.setAttribute('class',cl);svg.append(n)}
 function drawDecision(){
   let s=q('#decisionChart');s.innerHTML='';
-  const L=52,Ri=675,Tp=22,B=250,X=v=>L+(v-.05)/.55*(Ri-L),Y=v=>Tp+(1-v)*(B-Tp);
+  const L=76,Ri=675,Tp=22,B=250,X=v=>L+(v-.05)/.55*(Ri-L),Y=v=>Tp+(1-v)*(B-Tp);
   [0,.25,.5,.75,1].forEach(v=>{line(s,L,Y(v),Ri,Y(v),'gridline');text(s,L-8,Y(v)+4,pct(v,0),'end')});
   line(s,L,B,Ri,B,'axis');line(s,L,Tp,L,B,'axis');
   let poly=document.createElementNS('http://www.w3.org/2000/svg','polyline');
   poly.setAttribute('points',T.map(r=>X(r[0])+','+Y(r[4])).join(' '));poly.setAttribute('class','risk');s.append(poly);
   const r=T.find(x=>x[0]===state.threshold);circle(s,X(r[0]),Y(r[4]),'alert');
   [.05,.2,.4,.6].forEach(v=>text(s,X(v),276,pct(v,0),'middle'));
-  text(s,360,296,'Intervention threshold','middle');
-  rotatedText(s,13,136,'Recall (% of 640 failure-positive terminal-days detected)');
+  text(s,380,296,'Intervention threshold','middle');
+  rotatedText(s,18,136,'Recall: % of actual failure-positive observations detected');
 }
 function drawRisk(){
   let s=q('#riskChart');s.innerHTML='';
