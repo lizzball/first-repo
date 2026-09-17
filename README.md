@@ -20,24 +20,31 @@ Too low a threshold and healthy terminals get unnecessary support touches. Too h
 - ROC and precision-recall evaluation for a low-prevalence outcome
 - A threshold simulator translating probabilities into operational consequences
 - A 7 / 14 / 30 day telemetry view to inspect deterioration before failure
+- A Snowflake-compatible SQL feature-engineering example using window functions and leakage-safe trailing history
 
 ## Important threshold interpretation
 
-The intervention slider **does not change the evaluation cohort**. The synthetic holdout stays fixed at **24,000 terminal-days**, containing **640 observed failures** for a baseline failure prevalence of **2.67%**.
+The intervention slider **does not change the evaluation cohort**.
 
-Changing the threshold only changes how the model converts predicted risk into an action. Therefore the following are threshold-dependent:
+The evaluation set is:
 
-- failures detected
-- failures missed
-- healthy terminal-days flagged
-- healthy terminal-days not flagged
-- total interventions
-- precision
-- recall
-- false-positive rate
-- estimated failures prevented under the stated intervention assumption
+`1,000 held-out terminals × 24 scored days per terminal = 24,000 prediction observations`
 
-This distinction is now made explicit in the live dashboard so fixed cohort statistics are not mistaken for slider-driven model outputs.
+The simulation spans 30 days, but days 0–5 are removed before modelling so trailing-history features have prior context. One held-out terminal on one eligible scored day is one prediction observation.
+
+The fixed evaluation set contains **640 failure-positive observations**, giving a baseline positive rate of **2.67%**.
+
+Changing the risk threshold only changes how the model converts predicted risk into an action. Therefore failures detected, failures missed, healthy observations flagged, interventions, precision, recall and false-positive rate are threshold-dependent while the evaluation set remains fixed.
+
+## Intervention impact is a scenario, not a causal model output
+
+The dashboard no longer treats “failures prevented” as something learned by the classifier.
+
+Instead, it exposes a separate **assumed intervention-effectiveness** slider. The displayed scenario output is:
+
+`detected failure-positive observations × assumed intervention effectiveness`
+
+This is explicitly a sensitivity analysis. The risk model estimates who is likely to fail; it does **not** estimate the causal effect of support or device intervention.
 
 ## Results
 
@@ -48,24 +55,39 @@ This distinction is now made explicit in the live dashboard so fixed cohort stat
 | Logistic regression | snapshot + history | 0.923 | 0.719 |
 | XGBoost | snapshot + history | 0.920 | 0.786 |
 
-The main result is not that one algorithm "wins." The useful result is that longitudinal telemetry materially improves retrieval of rare failures, and that the intervention threshold changes the operational outcome.
+The main result is not that one algorithm "wins." The useful result is that longitudinal telemetry materially improves retrieval of rare failures, and that the intervention threshold changes the operational trade-off.
 
 At a 25% intervention threshold in the synthetic holdout:
 
-- 500 of 640 impending failures are detected
-- 140 failures are missed
-- 200 healthy terminal-days are flagged
+- 500 of 640 failure-positive observations are detected
+- 140 failure-positive observations are missed
+- 200 healthy prediction observations are flagged
 - 700 proactive interventions are triggered
 - precision is 71.4%
 - recall is 78.1%
 
 Those trade-offs are the point of the project.
 
+## SQL artifact
+
+[`sql/build_terminal_risk_features.sql`](sql/build_terminal_risk_features.sql) shows how the same modelling table could be assembled in a warehouse from daily telemetry and event tables.
+
+It demonstrates:
+
+- daily deduplication with `ROW_NUMBER()` / `QUALIFY`
+- 7 / 14 / 30 day window features
+- current-vs-history deltas
+- next-24-hour label construction
+- explicit prevention of future leakage by ending history windows at `1 PRECEDING`
+- preservation of `terminal_id` for grouped train / test validation
+
+The table names are illustrative. The SQL is not based on Block or Square internal schemas.
+
 ## Demo
 
 The static demo lives in [`docs/`](docs/) and is designed for GitHub Pages. It has two views:
 
-1. **Intervention threshold** — move the threshold and watch failures detected, missed failures, healthy terminal-days flagged, intervention volume and estimated support impact update while the holdout cohort stays fixed.
+1. **Intervention threshold** — move the threshold and watch detection, false positives and intervention volume change. A separate scenario slider shows how assumed intervention effectiveness changes the hypothetical impact estimate.
 2. **Telemetry history** — switch between 7, 14 and 30 day views for a representative synthetic terminal approaching failure.
 
 ## Reproduce the analysis
@@ -81,7 +103,7 @@ The script regenerates the synthetic data, trains the models and prints the eval
 
 ## Notes on the synthetic data
 
-The telemetry schema is intentionally generic. It includes signals such as Wi-Fi strength, reconnect events, checkout latency, timeout rate, transaction volume and charging interruptions. These fields are simulated for the purpose of demonstrating modeling and decision support; they are not presented as Square's internal production telemetry schema.
+The telemetry schema is intentionally generic. It includes signals such as Wi-Fi strength, reconnect events, checkout latency, timeout rate, transaction volume and charging interruptions. These fields are simulated for the purpose of demonstrating modelling and decision support; they are not presented as Square's internal production telemetry schema.
 
 Square's public Terminal Sandbox documents simulated checkout states, including successful checkouts, cancellations, timeouts and offline-device behavior:
 
