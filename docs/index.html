@@ -80,18 +80,18 @@ text{font:11px Inter,sans-serif;fill:var(--muted)}
 <label>Intervene at predicted 24h failure risk ≥ <strong id="thlabel">25%</strong></label>
 <input id="threshold" type="range" min="5" max="60" step="5" value="25">
 <div class="range"><span>5% · aggressive</span><span>60% · selective</span></div>
-<p class="slider-note"><strong>What changes:</strong> the decision rule and downstream intervention metrics. <strong>What does not:</strong> the 24,000-row evaluation holdout, its 640 observed failures, or the 2.67% baseline failure prevalence.</p>
+<p class="slider-note"><strong>Evaluation set is fixed:</strong> 1,000 held-out terminals × 24 scored days = 24,000 terminal-day rows. The first 6 days are excluded so history features have prior context. Moving the slider changes only which rows are classified high-risk.</p>
 </div>
 <div class="metrics">
-<article class="metric"><span>Failures detected</span><strong id="tp">500</strong><small id="recall"></small></article>
-<article class="metric"><span>Healthy terminals flagged</span><strong id="fp">200</strong><small id="fpr"></small></article>
+<article class="metric"><span>Failure-positive days detected</span><strong id="tp">500</strong><small id="recall"></small></article>
+<article class="metric"><span>Healthy terminal-days flagged</span><strong id="fp">200</strong><small id="fpr"></small></article>
 <article class="metric"><span>Interventions triggered</span><strong id="flagged">700</strong><small id="precision"></small></article>
 <article class="metric"><span>Failures prevented*</span><strong id="prevented">360</strong><small id="support"></small></article>
 </div>
 <div class="grid">
 <div class="chart">
 <p class="kicker">OPERATING POINT</p>
-<h3>Recall across intervention thresholds</h3>
+<h3>Failure recall across intervention thresholds</h3>
 <svg id="decisionChart" viewBox="0 0 700 300" aria-label="Model operating point chart"></svg>
 </div>
 <aside class="note">
@@ -99,11 +99,13 @@ text{font:11px Inter,sans-serif;fill:var(--muted)}
 <h3>Model performance is not the decision.</h3>
 <p id="copy"></p>
 <dl>
-<div><dt>Evaluation holdout <span class="fixed">fixed</span></dt><dd>24,000 terminal-days</dd></div>
-<div><dt>Observed failures <span class="fixed">fixed</span></dt><dd>640</dd></div>
-<div><dt>Baseline prevalence <span class="fixed">fixed</span></dt><dd>2.67%</dd></div>
+<div><dt>Held-out terminals <span class="fixed">fixed</span></dt><dd>1,000</dd></div>
+<div><dt>Scored days / terminal <span class="fixed">fixed</span></dt><dd>24</dd></div>
+<div><dt>Evaluation rows <span class="fixed">fixed</span></dt><dd>24,000 terminal-days</dd></div>
+<div><dt>Failure-positive rows <span class="fixed">fixed</span></dt><dd>640</dd></div>
+<div><dt>Baseline positive rate <span class="fixed">fixed</span></dt><dd>2.67%</dd></div>
 <div class="dynamic"><dt>Predicted high-risk <span class="fixed">threshold-dependent</span></dt><dd id="riskshare">2.92%</dd></div>
-<div class="dynamic"><dt>Missed failures <span class="fixed">threshold-dependent</span></dt><dd id="fn">140</dd></div>
+<div class="dynamic"><dt>Missed failure-positive rows <span class="fixed">threshold-dependent</span></dt><dd id="fn">140</dd></div>
 <div class="dynamic"><dt>Healthy not flagged <span class="fixed">threshold-dependent</span></dt><dd id="tn">23,160</dd></div>
 </dl>
 </aside>
@@ -182,25 +184,27 @@ function decision(){
   q('#fn').textContent=fn.toLocaleString();
   q('#tn').textContent=tn.toLocaleString();
   q('#copy').textContent=r[0]<=.1
-    ? 'This is an aggressive early-warning policy: it captures more of the same 640 observed failures, but flags more healthy terminal-days in the fixed holdout.'
+    ? 'This is an aggressive early-warning policy: it detects more of the 640 failure-positive terminal-days, but flags more healthy terminal-days in the same fixed evaluation set.'
     : r[0]<=.3
-    ? 'This range captures most observed failures while limiting unnecessary interventions. The underlying holdout and failure prevalence stay fixed; only the classification rule changes.'
-    : 'This policy is more selective. Fewer terminal-days trigger intervention, but more of the same observed failures fall below threshold.';
+    ? 'This range detects most failure-positive terminal-days while limiting unnecessary interventions. The 1,000 terminals and 24,000 evaluation rows stay fixed; only the classification rule changes.'
+    : 'This policy is more selective. Fewer terminal-days trigger intervention, but more of the 640 failure-positive rows fall below threshold.';
   drawDecision(); drawRisk();
 }
 function line(svg,x1,y1,x2,y2,c){let n=document.createElementNS('http://www.w3.org/2000/svg','line');for(const[k,v]of Object.entries({x1,y1,x2,y2,class:c}))n.setAttribute(k,v);svg.append(n)}
 function text(svg,x,y,t,a='start'){let n=document.createElementNS('http://www.w3.org/2000/svg','text');n.setAttribute('x',x);n.setAttribute('y',y);n.setAttribute('text-anchor',a);n.textContent=t;svg.append(n)}
+function rotatedText(svg,x,y,t){let n=document.createElementNS('http://www.w3.org/2000/svg','text');n.setAttribute('x',x);n.setAttribute('y',y);n.setAttribute('text-anchor','middle');n.setAttribute('transform','rotate(-90 '+x+' '+y+')');n.textContent=t;svg.append(n)}
 function circle(svg,cx,cy,cl){let n=document.createElementNS('http://www.w3.org/2000/svg','circle');n.setAttribute('cx',cx);n.setAttribute('cy',cy);n.setAttribute('r',5);n.setAttribute('class',cl);svg.append(n)}
 function drawDecision(){
   let s=q('#decisionChart');s.innerHTML='';
   const L=52,Ri=675,Tp=22,B=250,X=v=>L+(v-.05)/.55*(Ri-L),Y=v=>Tp+(1-v)*(B-Tp);
   [0,.25,.5,.75,1].forEach(v=>{line(s,L,Y(v),Ri,Y(v),'gridline');text(s,L-8,Y(v)+4,pct(v,0),'end')});
   line(s,L,B,Ri,B,'axis');line(s,L,Tp,L,B,'axis');
-  let p=document.createElementNS('http://www.w3.org/2000/svg','polyline');
-  p.setAttribute('points',T.map(r=>X(r[0])+','+Y(r[4])).join(' '));p.setAttribute('class','risk');s.append(p);
+  let poly=document.createElementNS('http://www.w3.org/2000/svg','polyline');
+  poly.setAttribute('points',T.map(r=>X(r[0])+','+Y(r[4])).join(' '));poly.setAttribute('class','risk');s.append(poly);
   const r=T.find(x=>x[0]===state.threshold);circle(s,X(r[0]),Y(r[4]),'alert');
   [.05,.2,.4,.6].forEach(v=>text(s,X(v),276,pct(v,0),'middle'));
   text(s,360,296,'Intervention threshold','middle');
+  rotatedText(s,13,136,'Recall (% of 640 failure-positive terminal-days detected)');
 }
 function drawRisk(){
   let s=q('#riskChart');s.innerHTML='';
@@ -208,8 +212,8 @@ function drawRisk(){
   [0,.25,.5,.75,1].forEach(v=>{line(s,L,Y(v),Ri,Y(v),'gridline');text(s,L-8,Y(v)+4,pct(v,0),'end')});
   line(s,L,B,Ri,B,'axis');line(s,L,Tp,L,B,'axis');line(s,L,Y(state.threshold),Ri,Y(state.threshold),'threshold');
   text(s,Ri,Y(state.threshold)-7,pct(state.threshold,0)+' intervention','end');
-  let p=document.createElementNS('http://www.w3.org/2000/svg','polyline');
-  p.setAttribute('points',arr.map((v,i)=>X(i)+','+Y(v)).join(' '));p.setAttribute('class','risk');s.append(p);
+  let poly=document.createElementNS('http://www.w3.org/2000/svg','polyline');
+  poly.setAttribute('points',arr.map((v,i)=>X(i)+','+Y(v)).join(' '));poly.setAttribute('class','risk');s.append(poly);
   arr.forEach((v,i)=>circle(s,X(i),Y(v),v>=state.threshold?'alert':'dot'));
   let cross=arr.findIndex(v=>v>=state.threshold);
   q('#historyTitle').textContent=state.window+'-day telemetry history';
