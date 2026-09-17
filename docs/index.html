@@ -23,7 +23,7 @@ body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,-apple-sys
 .heading h2{font-size:32px;letter-spacing:-.025em;margin:0}
 .chip{background:var(--card);border:1px solid var(--line);padding:8px 10px;font-size:12px;color:var(--muted)}
 .panel,.metric,.chart,.note,.signals article,.cohort{background:var(--card);border:1px solid var(--line)}
-.panel{padding:20px}
+.panel{padding:20px}.panel+.panel{margin-top:9px}
 .panel input{width:100%;accent-color:var(--green)}
 .range{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
 .slider-note{margin:12px 0 0;color:var(--muted);font-size:12px}.formula{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}.formula div{background:var(--soft);padding:10px 12px;font-size:12px}.formula strong{display:block;font-size:16px;color:var(--ink);margin-bottom:2px}.axis-explain{margin:4px 0 8px;font-size:12px;color:var(--muted)}
@@ -55,8 +55,8 @@ tr.best td{background:#dce7e2;font-weight:650}
 footer{margin-top:40px;border-top:1px solid var(--line);padding-top:18px;color:var(--muted);font-size:11px}
 .axis{stroke:#bbb}.gridline{stroke:#e8e8e8}.risk{fill:none;stroke:var(--green);stroke-width:3}.threshold{stroke:var(--rust);stroke-dasharray:5 5}.dot{fill:var(--green)}.alert{fill:var(--rust)}
 text{font:11px Inter,sans-serif;fill:var(--muted)}
-@media(max-width:760px){.heading{align-items:start;flex-direction:column}.metrics,.signals{grid-template-columns:1fr 1fr}.grid,.compare{grid-template-columns:1fr}.compare{gap:18px}.chip{max-width:100%}}
-@media(max-width:470px){.wrap{width:calc(100% - 22px);padding-top:32px}.metrics,.signals{grid-template-columns:1fr}.hero h1{font-size:47px}.tabs{gap:14px}.tabs button{font-size:13px}}
+@media(max-width:760px){.heading{align-items:start;flex-direction:column}.metrics,.signals,.formula{grid-template-columns:1fr 1fr}.grid,.compare{grid-template-columns:1fr}.compare{gap:18px}.chip{max-width:100%}}
+@media(max-width:470px){.wrap{width:calc(100% - 22px);padding-top:32px}.metrics,.signals,.formula{grid-template-columns:1fr}.hero h1{font-size:47px}.tabs{gap:14px}.tabs button{font-size:13px}}
 </style>
 </head>
 <body>
@@ -80,13 +80,22 @@ text{font:11px Inter,sans-serif;fill:var(--muted)}
 <label>Intervene at predicted 24h failure risk ≥ <strong id="thlabel">25%</strong></label>
 <input id="threshold" type="range" min="5" max="60" step="5" value="25">
 <div class="range"><span>5% · aggressive</span><span>60% · selective</span></div>
-<p class="slider-note"><strong>How the evaluation set is built:</strong> the model is scored once per held-out terminal per eligible day. One terminal observed on one scored day = one prediction observation.</p><div class="formula"><div><strong>1,000</strong>held-out terminals</div><div><strong>× 24</strong>scored days per terminal</div><div><strong>= 24,000</strong>prediction observations</div></div><p class="slider-note">Why 24 days? The simulation spans 30 days, but days 0–5 are removed before modelling so trailing-history features have prior context. Moving the threshold changes only the action rule applied to these same 24,000 observations.</p>
+<p class="slider-note"><strong>How the evaluation set is built:</strong> the model is scored once per held-out terminal per eligible day. One terminal observed on one scored day = one prediction observation.</p>
+<div class="formula"><div><strong>1,000</strong>held-out terminals</div><div><strong>× 24</strong>scored days per terminal</div><div><strong>= 24,000</strong>prediction observations</div></div>
+<p class="slider-note">Why 24 days? The simulation spans 30 days, but days 0–5 are removed before modelling so trailing-history features have prior context. Moving the threshold changes only the action rule applied to these same 24,000 observations.</p>
+</div>
+<div class="panel">
+<p class="kicker">SCENARIO ASSUMPTION · NOT LEARNED BY THE MODEL</p>
+<label>Assumed effectiveness of a successful intervention = <strong id="efflabel">72%</strong></label>
+<input id="effectiveness" type="range" min="0" max="100" step="5" value="72">
+<div class="range"><span>0% · no assumed benefit</span><span>100% · every detected event avoided</span></div>
+<p class="slider-note">This slider is a what-if sensitivity analysis. The model estimates risk and detection; it does not estimate the causal effect of an intervention.</p>
 </div>
 <div class="metrics">
 <article class="metric"><span>Failure-positive days detected</span><strong id="tp">500</strong><small id="recall"></small></article>
 <article class="metric"><span>Healthy terminals flagged</span><strong id="fp">200</strong><small id="fpr"></small></article>
 <article class="metric"><span>Interventions triggered</span><strong id="flagged">700</strong><small id="precision"></small></article>
-<article class="metric"><span>Failures prevented*</span><strong id="prevented">360</strong><small id="support"></small></article>
+<article class="metric"><span>Scenario-estimated events avoided*</span><strong id="avoided">360</strong><small id="scenario"></small></article>
 </div>
 <div class="grid">
 <div class="chart">
@@ -146,41 +155,43 @@ text{font:11px Inter,sans-serif;fill:var(--muted)}
 </div>
 </section>
 <footer>
-<p>* Synthetic assumptions: 72% intervention effectiveness and 0.6 support contacts per prevented material failure. These are decision-layer assumptions, not learned parameters.</p>
+<p>* “Scenario-estimated events avoided” = detected failure-positive observations × the user-selected intervention-effectiveness assumption. It is a sensitivity-analysis output, not a causal estimate learned from data.</p>
 <p>Independent portfolio project using synthetic telemetry. Public Square Terminal Sandbox behavior provides product framing; internal schemas and production data are not used.</p>
 </footer>
 </main>
 <script>
 const HOLDOUT=24000, FAILURES=640, HEALTHY=HOLDOUT-FAILURES;
 const T=[
-[.05,541,493,.5232,.8453,.0211,1034,390,234],
-[.10,530,356,.5982,.8281,.0152,886,382,229],
-[.15,521,287,.6448,.8141,.0123,808,375,225],
-[.20,514,234,.6872,.8031,.0100,748,370,222],
-[.25,500,200,.7143,.7812,.0086,700,360,216],
-[.30,484,182,.7267,.7562,.0078,666,348,209],
-[.35,474,157,.7512,.7406,.0067,631,341,205],
-[.40,467,144,.7643,.7297,.0062,611,336,202],
-[.45,454,127,.7814,.7094,.0054,581,327,196],
-[.50,439,108,.8026,.6859,.0046,547,316,190],
-[.55,430,88,.8301,.6719,.0038,518,310,186],
-[.60,420,67,.8624,.6562,.0029,487,302,181]
+[.05,541,493,.5232,.8453,.0211,1034],
+[.10,530,356,.5982,.8281,.0152,886],
+[.15,521,287,.6448,.8141,.0123,808],
+[.20,514,234,.6872,.8031,.0100,748],
+[.25,500,200,.7143,.7812,.0086,700],
+[.30,484,182,.7267,.7562,.0078,666],
+[.35,474,157,.7512,.7406,.0067,631],
+[.40,467,144,.7643,.7297,.0062,611],
+[.45,454,127,.7814,.7094,.0054,581],
+[.50,439,108,.8026,.6859,.0046,547],
+[.55,430,88,.8301,.6719,.0038,518],
+[.60,420,67,.8624,.6562,.0029,487]
 ];
 const R=[.0048,.0047,.0038,.0027,.0023,.0017,.0021,.0022,.0026,.0028,.0020,.0027,.0017,.0019,.0017,.0023,.0033,.0020,.0023,.0023,.0013,.0015,.0024,.0015,.0018,.0021,.0047,.0351,.8019,.9902];
-let state={threshold:.25,window:30};
+let state={threshold:.25,window:30,effectiveness:.72};
 const q=s=>document.querySelector(s),qa=s=>[...document.querySelectorAll(s)],pct=(v,d=1)=>(v*100).toFixed(d)+'%';
 function decision(){
   const r=T.find(x=>x[0]===state.threshold)||T[4];
   const fn=FAILURES-r[1], tn=HEALTHY-r[2], interventionRate=r[6]/HOLDOUT;
+  const avoided=Math.round(r[1]*state.effectiveness);
   q('#thlabel').textContent=pct(r[0],0);
+  q('#efflabel').textContent=pct(state.effectiveness,0);
   q('#tp').textContent=r[1].toLocaleString();
   q('#fp').textContent=r[2].toLocaleString();
   q('#precision').textContent=pct(r[3])+' precision · '+pct(interventionRate,2)+' of holdout';
   q('#recall').textContent=pct(r[4])+' recall';
   q('#fpr').textContent=pct(r[5],2)+' false-positive rate';
   q('#flagged').textContent=r[6].toLocaleString();
-  q('#prevented').textContent=r[7].toLocaleString();
-  q('#support').textContent='≈'+r[8].toLocaleString()+' support contacts avoided';
+  q('#avoided').textContent=avoided.toLocaleString();
+  q('#scenario').textContent=pct(state.effectiveness,0)+' assumed intervention effect';
   q('#riskshare').textContent=pct(interventionRate,2);
   q('#fn').textContent=fn.toLocaleString();
   q('#tn').textContent=tn.toLocaleString();
@@ -233,6 +244,7 @@ qa('[data-window]').forEach(b=>b.onclick=()=>{
   drawRisk();
 });
 q('#threshold').oninput=e=>{state.threshold=+e.target.value/100;decision()};
+q('#effectiveness').oninput=e=>{state.effectiveness=+e.target.value/100;decision()};
 decision();
 </script>
 </body>
